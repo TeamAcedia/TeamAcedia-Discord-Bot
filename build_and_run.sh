@@ -1,18 +1,21 @@
 #!/bin/bash
 
-echo "Building the Go project..."
+while true; do
+    echo "Pulling latest changes..."
+    git pull
 
-# Make sure modules are tidy
-go mod tidy
+    echo "Tidying Go modules..."
+    go mod tidy
 
-# Build the executable
-go build -o discord-bot
+    echo "Building the Go project..."
+    go build -o discord-bot
 
-# Check if build succeeded
-if [ $? -eq 0 ]; then
-    echo "Build succeeded. Running the executable..."
-    ./discord-bot
-else
-    echo "Build failed."
-    exit 1
-fi
+    if [ $? -eq 0 ]; then
+        echo "Build succeeded. Running the executable..."
+        ./discord-bot
+        echo "Executable exited with code $?. Restarting..."
+    else
+        echo "Build failed. Retrying in 5 seconds..."
+        sleep 5
+    fi
+done
