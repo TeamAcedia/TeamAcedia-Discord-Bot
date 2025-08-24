@@ -118,7 +118,10 @@ func HandleReactionAdd(s *discordgo.Session, r *discordgo.MessageReactionAdd, st
 				}(r.ChannelID, msg.ID)
 			}
 
-			break
+			return
 		}
 	}
+
+	// Remove user's reaction
+	_ = s.MessageReactionRemove(r.ChannelID, r.MessageID, r.Emoji.Name, r.UserID)
 }

@@ -106,7 +106,7 @@ func Start(botToken string, appID string, guildID string) {
 	}
 
 	// Enable intents for message content and events
-	session.Identify.Intents = discordgo.IntentsGuildMessages | discordgo.IntentsMessageContent
+	session.Identify.Intents = discordgo.IntentsAll
 
 	// Open the session
 	err = session.Open()
@@ -132,16 +132,15 @@ func Start(botToken string, appID string, guildID string) {
 		log.Fatal(err)
 	}
 
+	// Register handlers
+	session.AddHandler(logging.OnMessageCreate)
+	session.AddHandler(logging.OnMessageUpdate)
+	session.AddHandler(logging.OnMessageDelete)
 	session.AddHandler(func(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 		reaction_roles.HandleReactionAdd(s, r, state)
 	})
 
 	session.AddHandler(interactionHandler)
-
-	// Register handlers
-	session.AddHandler(logging.OnMessageCreate)
-	session.AddHandler(logging.OnMessageUpdate)
-	session.AddHandler(logging.OnMessageDelete)
 
 	// Wait here until Ctrl+C or kill signal
 	stop := make(chan os.Signal, 1)
