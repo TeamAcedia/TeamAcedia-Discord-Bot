@@ -28,6 +28,7 @@ func LoadConfig(path string) (*models.Config, error) {
 		GuildID:                cfgFile.Section("").Key("GuildID").String(),
 		ReactionRolesChannelID: cfgFile.Section("").Key("ReactionRolesChannelID").String(),
 		LogChannelID:           cfgFile.Section("").Key("LogChannelID").String(),
+		MemberRoleID:           cfgFile.Section("").Key("MemberRoleID").String(),
 		ReactionRoles:          reactionRoles,
 	}
 

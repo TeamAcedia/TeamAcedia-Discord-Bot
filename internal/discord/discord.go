@@ -7,6 +7,7 @@ import (
 	"syscall"
 	"teamacedia/discord-bot/internal/config"
 	"teamacedia/discord-bot/internal/logging"
+	"teamacedia/discord-bot/internal/member_role"
 	"teamacedia/discord-bot/internal/reaction_roles"
 
 	"github.com/bwmarrin/discordgo"
@@ -136,11 +137,15 @@ func Start(botToken string, appID string, guildID string) {
 	session.AddHandler(logging.OnMessageCreate)
 	session.AddHandler(logging.OnMessageUpdate)
 	session.AddHandler(logging.OnMessageDelete)
+	session.AddHandler(member_role.OnMemberJoin)
 	session.AddHandler(func(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 		reaction_roles.HandleReactionAdd(s, r, state)
 	})
 
 	session.AddHandler(interactionHandler)
+
+	// Assign role to all existing members once at startup
+	member_role.AssignRoleToAll(session, config.Config.GuildID, config.Config.MemberRoleID)
 
 	// Wait here until Ctrl+C or kill signal
 	stop := make(chan os.Signal, 1)

@@ -7,6 +7,7 @@ type Config struct {
 	ReactionRolesChannelID string
 	ReactionRoles          []ReactionRole
 	LogChannelID           string
+	MemberRoleID           string
 }
 
 type ReactionRole struct {
