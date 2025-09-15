@@ -8,6 +8,7 @@ import (
 
 	"teamacedia/discord-bot/internal/config"
 	"teamacedia/discord-bot/internal/discord"
+	"teamacedia/discord-bot/internal/sticky_roles"
 )
 
 func main() {
@@ -18,6 +19,12 @@ func main() {
 	}
 
 	config.Config = cfg
+
+	// Init DB
+	err = sticky_roles.InitDB("sticky_roles.db")
+	if err != nil {
+		log.Fatal("Failed to init sticky_roles DB:", err)
+	}
 
 	// Start the Discord bot
 

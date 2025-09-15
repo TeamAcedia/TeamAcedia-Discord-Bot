@@ -7,8 +7,8 @@ import (
 	"syscall"
 	"teamacedia/discord-bot/internal/config"
 	"teamacedia/discord-bot/internal/logging"
-	"teamacedia/discord-bot/internal/member_role"
 	"teamacedia/discord-bot/internal/reaction_roles"
+	"teamacedia/discord-bot/internal/sticky_roles"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -127,7 +127,6 @@ func Start(botToken string, appID string, guildID string) {
 	log.Println("Commands registered.")
 
 	// Set up handlers
-
 	state, err := reaction_roles.InitReactionRoles(session, config.Config.ReactionRoles)
 	if err != nil {
 		log.Fatal(err)
@@ -137,15 +136,20 @@ func Start(botToken string, appID string, guildID string) {
 	session.AddHandler(logging.OnMessageCreate)
 	session.AddHandler(logging.OnMessageUpdate)
 	session.AddHandler(logging.OnMessageDelete)
-	session.AddHandler(member_role.OnMemberJoin)
+	session.AddHandler(sticky_roles.OnMemberJoin)
+	session.AddHandler(sticky_roles.OnMemberUpdate)
+	session.AddHandler(sticky_roles.OnRoleDelete)
 	session.AddHandler(func(s *discordgo.Session, r *discordgo.MessageReactionAdd) {
 		reaction_roles.HandleReactionAdd(s, r, state)
 	})
 
 	session.AddHandler(interactionHandler)
 
-	// Assign role to all existing members once at startup
-	member_role.AssignRoleToAll(session, config.Config.GuildID, config.Config.MemberRoleID)
+	// Log all member roles
+	err = sticky_roles.SyncGuildRoles(session, guildID)
+	if err != nil {
+		log.Printf("Failed to sync guild roles: %v", err)
+	}
 
 	// Wait here until Ctrl+C or kill signal
 	stop := make(chan os.Signal, 1)
