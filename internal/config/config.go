@@ -30,6 +30,8 @@ func LoadConfig(path string) (*models.Config, error) {
 		LogChannelID:           cfgFile.Section("").Key("LogChannelID").String(),
 		MemberRoleID:           cfgFile.Section("").Key("MemberRoleID").String(),
 		ReactionRoles:          reactionRoles,
+		AnonWebhook:            cfgFile.Section("").Key("AnonWebhook").String(),
+		AnonChannelID:          cfgFile.Section("").Key("AnonChannelID").String(),
 	}
 
 	return cfg, nil

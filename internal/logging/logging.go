@@ -2,6 +2,7 @@ package logging
 
 import (
 	"fmt"
+	"teamacedia/discord-bot/internal/anonimize"
 	"teamacedia/discord-bot/internal/config"
 	"time"
 
@@ -18,6 +19,12 @@ var messageCache = make(map[string]CachedMessage)
 
 // Message Create Handler
 func OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) {
+	deleted := anonimize.OnMessageCreate(s, m) // run anonimize handler first
+
+	if deleted {
+		return
+	}
+
 	if m.Author == nil || m.Author.Bot {
 		return
 	}

@@ -8,6 +8,8 @@ type Config struct {
 	ReactionRoles          []ReactionRole
 	LogChannelID           string
 	MemberRoleID           string
+	AnonWebhook            string
+	AnonChannelID          string
 }
 
 type ReactionRole struct {
