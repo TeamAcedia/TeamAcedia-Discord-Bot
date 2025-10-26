@@ -1,9 +1,13 @@
 package anonimize
 
 import (
+	"bytes"
 	"fmt"
+	"io"
+	"net/http"
 	"strings"
 	"teamacedia/discord-bot/internal/config"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -20,13 +24,13 @@ func SplitWebhookURL(url string) (string, string, error) {
 	return id, token, nil
 }
 
-// Message Create Handler
+// OnMessageCreate handles anonymous reposting with proper file support
 func OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) bool {
 	if m.Author == nil || m.Author.Bot {
 		return false
 	}
 
-	// Check if the message is in the anon channel
+	// Only handle anon channel
 	if m.ChannelID != config.Config.AnonChannelID {
 		return false
 	}
@@ -36,19 +40,54 @@ func OnMessageCreate(s *discordgo.Session, m *discordgo.MessageCreate) bool {
 		return false
 	}
 
-	// Send the message to the anon webhook but use the same username and avatar as the message sender
-	_, err = s.WebhookExecute(id, token, false, &discordgo.WebhookParams{
-		Content:   m.Content,
+	content := strings.TrimSpace(m.Content)
+
+	// Handle replies or forwards
+	if m.MessageReference != nil && m.MessageReference.MessageID != "" {
+		// Create a link to the replied message
+		link := fmt.Sprintf("https://discord.com/channels/%s/%s/%s", m.GuildID, m.MessageReference.ChannelID, m.MessageReference.MessageID)
+		content = fmt.Sprintf("Reply > %s\n%s", link, content)
+	}
+
+	params := &discordgo.WebhookParams{
+		Content:   content,
 		Username:  m.Author.DisplayName(),
 		AvatarURL: m.Author.AvatarURL(""),
-	})
+	}
 
-	if err != nil {
+	// Download attachments before deletion
+	client := &http.Client{Timeout: 10 * time.Second}
+
+	for _, a := range m.Attachments {
+		resp, err := client.Get(a.URL)
+		if err != nil {
+			params.Content += "\n" + a.URL
+			continue
+		}
+		data, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil || len(data) == 0 {
+			params.Content += "\n" + a.URL
+			continue
+		}
+
+		params.Files = append(params.Files, &discordgo.File{
+			Name:   a.Filename,
+			Reader: bytes.NewReader(data),
+		})
+	}
+
+	if params.Content == "" && len(params.Files) == 0 {
 		return false
 	}
 
-	// Delete the original message
-	s.ChannelMessageDelete(m.ChannelID, m.ID)
+	if err := s.ChannelMessageDelete(m.ChannelID, m.ID); err != nil {
+		return false
+	}
+
+	if _, err := s.WebhookExecute(id, token, false, params); err != nil {
+		return false
+	}
 
 	return true
 }
