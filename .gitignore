@@ -26,3 +26,4 @@ go.work.sum
 .env
 config.ini
 sticky_roles.db
+teamacedia.db
