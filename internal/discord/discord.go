@@ -4,11 +4,15 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
 	"teamacedia/discord-bot/internal/config"
+	"teamacedia/discord-bot/internal/db"
 	"teamacedia/discord-bot/internal/logging"
+	"teamacedia/discord-bot/internal/models"
 	"teamacedia/discord-bot/internal/reaction_roles"
 	"teamacedia/discord-bot/internal/sticky_roles"
+	"time"
 
 	"github.com/bwmarrin/discordgo"
 )
@@ -22,23 +26,138 @@ var (
 			Description: "Get a list of commands that work with this bot",
 			Options:     []*discordgo.ApplicationCommandOption{},
 		},
+		{
+			Name:        "remindme",
+			Description: "Set a reminder for yourself that sends daily until removed. Usage: /remindme [message]",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:        discordgo.ApplicationCommandOptionString,
+					Name:        "message",
+					Description: "Reminder message",
+					Required:    true,
+				},
+			},
+		},
+		{
+			Name:        "removereminder",
+			Description: "Remove a daily reminder set with /remindme",
+			Options: []*discordgo.ApplicationCommandOption{
+				{
+					Type:         discordgo.ApplicationCommandOptionString,
+					Name:         "message",
+					Description:  "Reminder message to remove",
+					Required:     true,
+					Autocomplete: true,
+				},
+			},
+		},
 	}
 )
 
+func containsIgnoreCase(haystack, needle string) bool {
+	return strings.Contains(strings.ToLower(haystack), strings.ToLower(needle))
+}
+
+func handleAutocomplete(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	data := i.ApplicationCommandData()
+
+	// Only autocomplete the removereminder command
+	if data.Name != "removereminder" {
+		return
+	}
+
+	// User input so far
+	input := data.Options[0].StringValue()
+
+	// Fetch reminders for the user
+	userReminders, err := db.GetUserReminders(i.Member.User.ID)
+	if err != nil {
+		log.Printf("Autocomplete DB error: %v", err)
+		return
+	}
+
+	choices := []*discordgo.ApplicationCommandOptionChoice{}
+
+	for _, r := range userReminders {
+		// Filter by input
+		if input == "" || containsIgnoreCase(r.Text, input) {
+			choices = append(choices, &discordgo.ApplicationCommandOptionChoice{
+				Name:  r.Text,
+				Value: r.Text,
+			})
+		}
+
+		// Discord allows max 25 choices
+		if len(choices) >= 25 {
+			break
+		}
+	}
+
+	s.InteractionRespond(i.Interaction, &discordgo.InteractionResponse{
+		Type: discordgo.InteractionResponseType(8),
+		Data: &discordgo.InteractionResponseData{
+			Choices: choices,
+		},
+	})
+}
+
 func interactionHandler(s *discordgo.Session, i *discordgo.InteractionCreate) {
+	if i.Type == discordgo.InteractionApplicationCommandAutocomplete {
+		handleAutocomplete(s, i)
+		return
+	}
+
 	if i.Type != discordgo.InteractionApplicationCommand {
 		return
 	}
 
 	data := i.ApplicationCommandData()
 
-	if data.Name == "help" {
+	var commands_description string = "Available commands:\n\n" +
+		"`/help` - Get a list of commands that work with this bot\n" +
+		"`/remindme [message]` - Set a reminder for yourself that sends daily until removed.\n" +
+		"`/removereminder [message]` - Remove a daily reminder set with `/remindme`\n"
+
+	switch data.Name {
+	case "help":
 		embed := &discordgo.MessageEmbed{
 			Title:       "Command Help",
-			Description: "Currently this bot has no commands, as we continue developing it, and adding features, more commands will be added..",
+			Description: commands_description,
 			Color:       0x00FFFF, // Cyan
 		}
 		replyEmbed(s, i, embed)
+	case "remindme":
+		reminderText := data.Options[0].StringValue()
+		err := db.AddReminder(models.Reminder{
+			UserID: i.Member.User.ID,
+			Text:   reminderText,
+		})
+		if err != nil {
+			reply(s, i, "Failed to add reminder: "+err.Error())
+		} else {
+			embed := &discordgo.MessageEmbed{
+				Title:       "Reminder Set",
+				Description: "Your daily reminder has been set:\n" + reminderText,
+				Color:       0x00FFFF, // Cyan
+			}
+			replyEmbed(s, i, embed)
+		}
+	case "removereminder":
+		reminderText := data.Options[0].StringValue()
+		err := db.DeleteReminder(models.Reminder{
+			UserID: i.Member.User.ID,
+			Text:   reminderText,
+		})
+		if err != nil {
+			reply(s, i, "Failed to remove reminder: "+err.Error())
+		} else {
+			embed := &discordgo.MessageEmbed{
+				Title:       "Reminder Removed",
+				Description: "Your daily reminder has been removed:\n" + reminderText,
+				Color:       0x00FFFF, // Cyan
+			}
+			replyEmbed(s, i, embed)
+		}
 	}
 }
 
@@ -166,4 +285,60 @@ func Start(botToken string, appID string, guildID string) {
 	}
 	session.Close()
 	log.Println("Bot stopped cleanly.")
+}
+
+func StartScheduler() {
+	ticker := time.NewTicker(1 * time.Hour)
+	defer ticker.Stop()
+
+	SendReminders()
+
+	// Create a channel to listen for OS signals
+	sigs := make(chan os.Signal, 1)
+	signal.Notify(sigs, os.Interrupt, syscall.SIGTERM)
+
+	for {
+		select {
+		case <-ticker.C:
+			now := time.Now()
+			if now.Hour() == 8 { // 8 AM
+				err := SendReminders()
+				if err != nil {
+					log.Printf("Error sending reminders: %v", err)
+				}
+			}
+		case <-sigs:
+			return
+		}
+	}
+}
+
+// Reminder code
+func SendReminders() error {
+	// Map of userID to list of models.reminder
+	reminders, err := db.GetAllReminders()
+	if err != nil {
+		return err
+	}
+	reminderMap := make(map[string][]models.Reminder)
+	for _, r := range reminders {
+		reminderMap[r.UserID] = append(reminderMap[r.UserID], r)
+	}
+
+	// Send reminders (placeholder logic)
+	for userID, rs := range reminderMap {
+		var message string
+		message = "You have the following reminders for today:\n\n"
+		for _, r := range rs {
+			message += "- " + r.Text + "\n"
+		}
+		embed := &discordgo.MessageEmbed{
+			Title:       "Daily Reminder",
+			Description: message,
+			Color:       0x00FFFF, // Cyan
+		}
+		DmUserEmbed(userID, embed)
+	}
+
+	return nil
 }

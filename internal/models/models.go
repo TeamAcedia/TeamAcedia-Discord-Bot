@@ -17,3 +17,8 @@ type ReactionRole struct {
 	Name  string
 	Emoji string
 }
+
+type Reminder struct {
+	UserID string
+	Text   string
+}

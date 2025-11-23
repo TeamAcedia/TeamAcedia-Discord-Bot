@@ -7,6 +7,7 @@ import (
 	"syscall"
 
 	"teamacedia/discord-bot/internal/config"
+	"teamacedia/discord-bot/internal/db"
 	"teamacedia/discord-bot/internal/discord"
 	"teamacedia/discord-bot/internal/sticky_roles"
 )
@@ -25,6 +26,11 @@ func main() {
 	if err != nil {
 		log.Fatal("Failed to init sticky_roles DB:", err)
 	}
+	err = db.InitDB("teamacedia.db")
+	if err != nil {
+		log.Fatalf("Failed to initialize DB: %v", err)
+	}
+	go discord.StartScheduler()
 
 	// Start the Discord bot
 
